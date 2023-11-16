@@ -1,0 +1,116 @@
+---
+title: "Prediction_Assignment_writeup"
+output: html_document
+author: "Ayush Kumar Panda"
+date: "2023-11-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+###Loading Required Libraries
+```{r, echo=TRUE}
+library(caret)
+library(rpart)
+library(randomForest)
+```
+
+###Loading Dataset
+```{r, echo=TRUE}
+naStrings <- c("NA","#DIV/0!","")
+training <- read.csv("C:/Users/Ayush Kumar Panda/Desktop/pml-training.csv", na.strings=naStrings)
+testing <- read.csv("C:/Users/Ayush Kumar Panda/Desktop/pml-testing.csv", na.strings=naStrings)
+```
+
+###Data Processing
+Dataset is cleaned from variables with near zero variance
+```{r, echo=TRUE}
+nzvTraining <- nearZeroVar(training, saveMetrics = TRUE)
+sum(nzvTraining$nzv)
+```
+36 variables with near zero variance are removed
+```{r, echo=TRUE}
+training <- training[, !nzvTraining$nzv]
+```
+Dataset is cleaned from Variables with more than 60% missing values
+```{r, echo=TRUE}
+na60Percent <- sapply(colnames(training), function(x) 
+    if(sum(is.na(training[, x])) > 0.60*nrow(training)) {
+        return(TRUE)
+    }else{
+        return(FALSE)
+    }
+)
+sum(na60Percent)
+```
+65 variables with more than 60% missing values are removed
+```{r, echo=TRUE}
+training <- training[, !na60Percent]
+```
+Dataset is cleaned from variables related with data acquisition (e.g id, timestamps, individuals' names, etc.) which are not suitable to be used in prediction
+```{r, echo=TRUE}
+training <- training[, -(1:6)]
+```
+Correlation analysis
+```{r, echo=TRUE}
+corr <- caret::findCorrelation(cor(training[, -53]), cutoff=0.8)
+names(training)[corr]
+```
+Many variables are highly correlated. PCA will be used in the pre-processing. After the data cleaning, the variables that are selected to specify the model are:
+```{r, echo=TRUE}
+names(training)
+```
+###Partioning the training set into two for training and testing
+60% for myTraining, 40% for myTesting
+```{r, echo=TRUE}
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ] 
+myTesting <- training[-inTrain, ]
+dim(training)
+dim(myTraining) 
+dim(myTesting)
+```
+
+###Using Decision Tree algorithms for prediction 
+```{r, echo=TRUE}
+modelRPART <- rpart(classe ~ ., data=myTraining, method="class")
+```
+Predicting
+```{r, echo=TRUE}
+predictionsRPART <- predict(modelRPART, myTesting, type = "class")
+```
+Using confusion matrix to test results
+```{r, echo=TRUE}
+confusionMatrix(predictionsRPART, as.factor(myTesting$classe))
+```
+###Using Random Forests algorithms for prediction
+```{r, echo=TRUE}
+myTraining$classe = factor(myTraining$classe)
+modelRF <- randomForest(classe ~. , data=myTraining)
+```
+Predicting
+```{r, echo=TRUE}
+predictionsRF <- predict(modelRF, myTesting, type = "class")
+```
+Using confusion matrix to test results
+```{r, echo=TRUE}
+confusionMatrix(predictionsRF, as.factor(myTesting$classe))
+```
+###Summary
+Random Forests yielded better results in terms of accuracy and Kappa.
+  
+###Generating files for assignment submission
+Using Random Forests prediction for assignment submission
+```{r, echo=TRUE}
+predictionsRF <- predict(modelRF, testing, type = "class")
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(predictionsRF)
+```
+  
